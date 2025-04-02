@@ -27,6 +27,7 @@ A CLI tool for interacting with local Ollama models, inspired by Claude Code but
   - Parallel execution with BatchTool
   - Autonomous agent functionality
   - RAG (Retrieval Augmented Generation) with vector database
+  - Web browsing and content summarization
   - Thinking mode display
 
 - **Developer Features**
@@ -37,6 +38,8 @@ A CLI tool for interacting with local Ollama models, inspired by Claude Code but
 
 ## Installation
 
+### Method 1: Standard Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/euclid.git
@@ -46,77 +49,125 @@ cd euclid
 pip install -e .
 
 # Optional: Install sentence-transformers for RAG functionality
-pip install sentence-transformers
+pip install sentence-transformers scikit-learn
+
+# Optional: Install web browsing dependencies
+pip install beautifulsoup4 html2text
 ```
+
+### Method 2: Docker Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/euclid.git
+cd euclid
+
+# Start the containers
+docker-compose -f docker/docker-compose.yml up -d
+
+# Access Euclid
+docker exec -it euclid-app bash
+euclid chat
+```
+
+For more details on Docker setup, see [Docker README](docker/README.md).
 
 ## Usage
 
 ### Interactive Chat
 
 ```bash
-# Start basic chat interface
-euclid chat
+# Start the advanced terminal UI (default)
+euclid
 
-# Launch advanced terminal UI
-euclid tui
+# Use the CLI interface instead
+euclid-cli chat
 
 # Use a specific model
-euclid chat --model llama3
+euclid --model mistral
 
 # Show model's thinking process
-euclid chat --thinking
+euclid --thinking
 ```
 
 ### Single Prompt
 
 ```bash
-# Run a single prompt
-euclid run "Your prompt here"
+# Run a single prompt with the CLI interface
+euclid-cli run "Your prompt here"
 
 # With a specific model
-euclid run "Write a Python function to calculate Fibonacci numbers" --model codellama
+euclid-cli run "Write a Python function to calculate Fibonacci numbers" --model codellama
 ```
 
 ### Model Management
 
 ```bash
 # List available models
-euclid models list
+euclid-cli models list
 
 # Pull a new model
-euclid models pull llama3
+euclid-cli models pull llama3
 
 # Get model details
-euclid models details llama3
+euclid-cli models details llama3
 
 # Benchmark model performance
-euclid models benchmark llama3 --iterations 5
+euclid-cli models benchmark llama3 --iterations 5
 ```
 
 ### RAG Functionality (if sentence-transformers is installed)
 
 ```bash
 # Create a new collection
-euclid rag create "My Knowledge Base" --description "General knowledge"
+euclid-cli rag create "My Knowledge Base" --description "General knowledge"
 
 # Add a document from a file
-euclid rag add my-collection-id --file data.txt --title "Important Data"
+euclid-cli rag add my-collection-id --file data.txt --title "Important Data"
 
 # Query the collection
-euclid rag query my-collection-id "How does photosynthesis work?"
+euclid-cli rag query my-collection-id "How does photosynthesis work?"
+```
+
+### Web Browsing
+
+```bash
+# Fetch and analyze a web page
+euclid-cli web fetch https://example.com --prompt "Summarize the main points"
+
+# Fetch with images disabled (for faster results)
+euclid-cli web fetch https://example.com --no-images
+
+# Search the web (uses mock data by default)
+euclid-cli web search "quantum computing basics"
+
+# Search the web with SerpAPI (set SERPAPI_API_KEY env var first)
+SERPAPI_API_KEY=your_key euclid-cli web search "quantum computing basics"
+
+# View web cache statistics
+euclid-cli web_cache stats
+
+# Clear web cache
+euclid-cli web_cache clear
+
+# Purge expired entries from web cache
+euclid-cli web_cache purge
 ```
 
 ### Additional Commands
 
 ```bash
 # View available functions
-euclid functions
+euclid-cli functions
 
 # View conversation history
-euclid history
+euclid-cli history
 
 # Launch autonomous agent
-euclid agent "Analyze the project structure and summarize it"
+euclid-cli agent "Analyze the project structure and summarize it"
+
+# Start MCP-compatible API server
+euclid-cli server start --port 8000
 ```
 
 ## Functions and Tools
@@ -126,6 +177,7 @@ Euclid supports the following functions:
 - **File Operations**: View, LS, GlobTool, GrepTool, Edit, Replace
 - **Model Management**: ListModels, PullModel, RemoveModel, ModelDetails, BenchmarkModel
 - **RAG Operations**: CreateCollection, ListCollections, AddDocument, QueryCollection
+- **Web Operations**: web_fetch, search_web
 - **Meta-Functions**: BatchTool, dispatch_agent
 
 ## Configuration
@@ -146,7 +198,41 @@ You can set these in a `.env` file in your project directory.
 - **Advanced TUI**: Split-screen interface showing both thinking and responses
 - **Model Insights**: Benchmarking and detailed model information
 - **Privacy**: All processing happens locally on your machine
+- **API Server**: MCP-compatible API for integration with other tools
+
+## API Server
+
+Euclid includes a Model Control Protocol (MCP) compatible API server for programmatic access:
+
+```bash
+# Start the API server
+euclid-cli server start --port 8000
+```
+
+The server provides the following endpoints:
+
+- `GET /v1/models` - List available models
+- `POST /v1/chat/completions` - Generate chat completions
+- `GET /v1/functions` - List available functions
+- `POST /v1/functions/{function_name}/execute` - Execute a specific function
+- `POST /v1/web/fetch` - Fetch and analyze content from a URL
+- `POST /v1/web/search` - Search the web for information
+
+The API is compatible with the OpenAI API format, allowing you to use Euclid with tools designed for commercial LLMs.
+
+For detailed documentation on the API server, see [API Documentation](docs/api/README.md).
+
+## Testing
+
+For information on how to run tests and contribute to testing, see [Test Plan](tests/TEST_PLAN.md).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see [Contributing Guide](CONTRIBUTING.md) for more information.
+
+## Documentation
+
+- [Installation Guide](INSTALL.md): Detailed installation instructions
+- [Docker Setup](docker/README.md): Running with Docker
+- [Contributing](CONTRIBUTING.md): How to contribute to the project
+- [Test Plan](tests/TEST_PLAN.md): Testing strategy and process
