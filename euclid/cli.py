@@ -13,11 +13,12 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.box import ROUNDED
 from rich.live import Live
-from rich.prompt import Prompt
+from rich.prompt import Prompt, Confirm
 
 from euclid.config import config
 from euclid.ollama import OllamaClient, Message
 from euclid.conversation import Conversation
+from euclid.models import ModelRegistry
 from euclid.functions import (
     process_text_with_function_calls, 
     get_available_functions,
@@ -39,7 +40,24 @@ from euclid.tools.registry import get_available_tools, run_tool
 # Import all function modules to register them
 from euclid.tools import file_operations
 
+# Import RAG features
+try:
+    from euclid.rag import (
+        VectorDB, 
+        vectordb, 
+        create_collection, 
+        list_collections, 
+        query_collection
+    )
+    HAVE_RAG = True
+except ImportError:
+    HAVE_RAG = False
+
 app = typer.Typer(help="A CLI tool for interacting with local Ollama models")
+models_app = typer.Typer(help="Model management commands")
+rag_app = typer.Typer(help="RAG (Retrieval Augmented Generation) commands")
+app.add_typer(models_app, name="models")
+app.add_typer(rag_app, name="rag")
 
 @app.command("chat")
 def chat(
@@ -64,8 +82,23 @@ def chat(
         True, "--functions/--no-functions",
         help="Enable or disable function calling"
     ),
+    advanced_ui: bool = typer.Option(
+        False, "--tui", "-u",
+        help="Use the advanced Terminal UI"
+    ),
 ):
     """Start an interactive chat session."""
+    # Check if using advanced TUI
+    if advanced_ui:
+        from euclid.tui import run_tui
+        run_tui(
+            model=model,
+            system_prompt=system_prompt,
+            conversation_id=conversation_id,
+            show_thinking=show_thinking
+        )
+        return
+    
     # Clear screen for a clean start
     clear_screen()
     
@@ -75,6 +108,29 @@ def chat(
     
     # Set up client
     client = OllamaClient(model=model)
+    
+    # Check if model exists
+    registry = ModelRegistry()
+    available_models = [m.name for m in registry.get_available_models()]
+    
+    if client.model not in available_models:
+        console.print(f"[warning]Model '{client.model}' not found locally.[/warning]")
+        should_pull = Confirm.ask(f"Would you like to pull the model '{client.model}' now?")
+        
+        if should_pull:
+            with create_spinner(f"Pulling model {client.model}"):
+                try:
+                    registry.pull_model(client.model)
+                    console.print(f"[success]Successfully pulled model: {client.model}[/success]")
+                except Exception as e:
+                    console.print(f"[error]Error pulling model: {str(e)}[/error]")
+                    console.print("Available models:")
+                    console.print(registry.list_available_models_table())
+                    return
+        else:
+            console.print("Available models:")
+            console.print(registry.list_available_models_table())
+            return
     
     # Get system prompt
     if system_file:
@@ -126,7 +182,7 @@ def chat(
     
     # Display header
     console.print(Panel(
-        "[bold green]Euclid Chat[/bold green] 🌿",
+        "[bold green]Euclid Chat[/bold green] \ud83c\udf3f",
         subtitle=f"Using model: [bold]{client.model}[/bold]",
         box=ROUNDED,
         border_style="green"
@@ -147,6 +203,28 @@ def chat(
             
             # Add user message to conversation
             conversation.add_message("user", user_input)
+            
+            # Check for special commands
+            if user_input.startswith("/model "):
+                # Model switching command
+                new_model = user_input.split("/model ")[1].strip()
+                if new_model in available_models:
+                    client = OllamaClient(model=new_model)
+                    console.print(f"[info]Switched to model: [bold]{new_model}[/bold][/info]")
+                    continue
+                else:
+                    console.print(f"[warning]Model '{new_model}' not found locally.[/warning]")
+                    should_pull = Confirm.ask(f"Would you like to pull the model '{new_model}' now?")
+                    
+                    if should_pull:
+                        with create_spinner(f"Pulling model {new_model}"):
+                            try:
+                                registry.pull_model(new_model)
+                                client = OllamaClient(model=new_model)
+                                console.print(f"[success]Switched to model: [bold]{new_model}[/bold][/success]")
+                            except Exception as e:
+                                console.print(f"[error]Error pulling model: {str(e)}[/error]")
+                    continue
             
             # Check for tool use with slash command
             tool_name = None
@@ -246,6 +324,29 @@ def run(
     # Set up client
     client = OllamaClient(model=model)
     
+    # Check if model exists
+    registry = ModelRegistry()
+    available_models = [m.name for m in registry.get_available_models()]
+    
+    if client.model not in available_models:
+        console.print(f"[warning]Model '{client.model}' not found locally.[/warning]")
+        should_pull = Confirm.ask(f"Would you like to pull the model '{client.model}' now?")
+        
+        if should_pull:
+            with create_spinner(f"Pulling model {client.model}"):
+                try:
+                    registry.pull_model(client.model)
+                    console.print(f"[success]Successfully pulled model: {client.model}[/success]")
+                except Exception as e:
+                    console.print(f"[error]Error pulling model: {str(e)}[/error]")
+                    console.print("Available models:")
+                    console.print(registry.list_available_models_table())
+                    return
+        else:
+            console.print("Available models:")
+            console.print(registry.list_available_models_table())
+            return
+    
     # Create messages
     messages = []
     if system_prompt:
@@ -338,48 +439,199 @@ def run(
             else:
                 console.print(EnhancedMarkdown(response_text))
 
-@app.command("models")
+@app.command("tui")
+def tui(
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model to use"),
+    system_prompt: Optional[str] = typer.Option(
+        None, "--system", "-s", 
+        help="System prompt to use"
+    ),
+    conversation_id: Optional[str] = typer.Option(
+        None, "--conversation", "-c",
+        help="Conversation ID to continue"
+    ),
+    show_thinking: bool = typer.Option(
+        True, "--thinking/--no-thinking", "-t/-nt",
+        help="Show model's thinking process"
+    ),
+):
+    """Launch the advanced terminal user interface."""
+    from euclid.tui import run_tui
+    run_tui(
+        model=model,
+        system_prompt=system_prompt,
+        conversation_id=conversation_id,
+        show_thinking=show_thinking
+    )
+
+@models_app.command("list")
 def list_models():
     """List available models from Ollama."""
-    client = OllamaClient()
+    registry = ModelRegistry()
+    console.print(registry.list_available_models_table())
+
+@models_app.command("pull")
+def pull_model(
+    model_name: str = typer.Argument(..., help="Model to pull from Ollama"),
+):
+    """Pull a model from the Ollama repository."""
+    registry = ModelRegistry()
     
-    with create_spinner("Fetching models"):
-        try:
-            models = client.get_available_models()
-        except Exception as e:
-            console.print(f"[error]Error: {str(e)}[/error]")
-            console.print("Make sure Ollama is running at " + client.base_url)
-            return
+    try:
+        model = registry.pull_model(model_name)
+        console.print(f"[success]Successfully pulled model: {model_name}[/success]")
+    except Exception as e:
+        console.print(f"[error]Error pulling model: {str(e)}[/error]")
+
+@models_app.command("remove")
+def remove_model(
+    model_name: str = typer.Argument(..., help="Model to remove"),
+):
+    """Remove a model from Ollama."""
+    registry = ModelRegistry()
     
-    if not models:
-        console.print("No models found. Make sure Ollama is running and has models available.")
+    if Confirm.ask(f"Are you sure you want to remove model '{model_name}'?"):
+        if registry.remove_model(model_name):
+            console.print(f"[success]Successfully removed model: {model_name}[/success]")
+        else:
+            console.print(f"[error]Failed to remove model: {model_name}[/error]")
+
+@models_app.command("details")
+def model_details(
+    model_name: str = typer.Argument(..., help="Model to get details for"),
+):
+    """Get detailed information about a model."""
+    registry = ModelRegistry()
+    details = registry.get_model_details(model_name)
+    
+    if not details:
+        console.print(f"[error]No details found for model: {model_name}[/error]")
         return
     
-    # Create a formatted table
-    from rich.table import Table
-    table = Table(title="Available Models", box=ROUNDED)
-    table.add_column("Name", style="cyan")
-    table.add_column("Size", style="green")
-    table.add_column("Modified", style="blue")
+    # Create a formatted display
+    console.print(f"[bold]Details for {model_name}[/bold]")
     
-    for model in models:
-        size = model.get("size", "Unknown")
-        if isinstance(size, int):
-            # Convert to human-readable size
-            if size < 1024:
-                size_str = f"{size} bytes"
-            elif size < 1024 * 1024:
-                size_str = f"{size/1024:.1f} KB"
-            else:
-                size_str = f"{size/(1024*1024):.1f} MB"
-        else:
-            size_str = str(size)
-        
-        modified = model.get("modified", "Unknown")
-        
-        table.add_row(model["name"], size_str, modified)
+    # Format model parameters
+    parameters = details.get("parameters", {})
+    if parameters:
+        console.print("\n[bold]Parameters:[/bold]")
+        for key, value in parameters.items():
+            console.print(f"  {key}: {value}")
     
-    console.print(table)
+    # Format model template
+    template = details.get("template", "")
+    if template:
+        console.print("\n[bold]Template:[/bold]")
+        console.print(Syntax(template, "text", theme="monokai", line_numbers=True))
+    
+    # Format license information
+    license_info = details.get("license", "")
+    if license_info:
+        console.print("\n[bold]License:[/bold]")
+        console.print(license_info)
+
+@models_app.command("benchmark")
+def benchmark_model(
+    model_name: str = typer.Argument(..., help="Model to benchmark"),
+    prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Prompt to use for benchmarking"),
+    iterations: int = typer.Option(3, "--iterations", "-i", help="Number of iterations to run"),
+):
+    """Benchmark a model's performance with a sample prompt."""
+    registry = ModelRegistry()
+    
+    test_prompt = prompt or "Generate a short poem about AI assistants."
+    
+    try:
+        results = registry.benchmark_model(model_name, test_prompt, iterations)
+        
+        avg_time = results["avg_time"]
+        avg_tokens_per_second = results["avg_tokens_per_second"]
+        
+        console.print(f"[bold]Benchmark Results for {model_name}[/bold]")
+        console.print(f"Prompt: \"{test_prompt}\"")
+        console.print(f"Iterations: {iterations}")
+        console.print(f"Average Response Time: {avg_time:.2f} seconds")
+        console.print(f"Average Tokens/Second: {avg_tokens_per_second:.2f}")
+        
+        # Add individual runs
+        console.print("\n[bold]Individual Runs:[/bold]")
+        for i, (time_taken, tokens_per_sec) in enumerate(zip(results["times"], results["tokens_per_second"])):
+            console.print(f"Run {i+1}: {time_taken:.2f}s ({tokens_per_sec:.2f} tokens/s)")
+    except Exception as e:
+        console.print(f"[error]Error benchmarking model: {str(e)}[/error]")
+
+# RAG Commands (if available)
+if HAVE_RAG:
+    @rag_app.command("create")
+    def create_rag_collection(
+        name: str = typer.Argument(..., help="Collection name"),
+        description: Optional[str] = typer.Option(None, "--description", "-d", help="Collection description"),
+    ):
+        """Create a new RAG collection."""
+        from euclid.rag import create_collection
+        collection_id = create_collection(name, description)
+        console.print(f"[success]Collection created: {name} (ID: {collection_id})[/success]")
+    
+    @rag_app.command("list")
+    def list_rag_collections():
+        """List all RAG collections."""
+        from euclid.rag import list_collections
+        console.print(EnhancedMarkdown(list_collections()))
+    
+    @rag_app.command("add")
+    def add_to_collection(
+        collection_id: str = typer.Argument(..., help="Collection ID"),
+        file_path: Optional[str] = typer.Option(None, "--file", "-f", help="File to add"),
+        content: Optional[str] = typer.Option(None, "--content", "-c", help="Content to add"),
+        title: Optional[str] = typer.Option(None, "--title", "-t", help="Document title"),
+    ):
+        """Add a document to a RAG collection."""
+        if not file_path and not content:
+            console.print("[error]Either --file or --content must be provided[/error]")
+            return
+        
+        if file_path:
+            try:
+                with open(file_path, "r") as f:
+                    content = f.read()
+                
+                if not title:
+                    title = os.path.basename(file_path)
+            except Exception as e:
+                console.print(f"[error]Error reading file: {str(e)}[/error]")
+                return
+        
+        from euclid.rag import add_document
+        console.print(EnhancedMarkdown(add_document(
+            collection_id=collection_id,
+            content=content,
+            title=title,
+            source=file_path
+        )))
+    
+    @rag_app.command("query")
+    def query_rag_collection(
+        collection_id: str = typer.Argument(..., help="Collection ID"),
+        query: str = typer.Argument(..., help="Query text"),
+        top_k: int = typer.Option(3, "--top-k", "-k", help="Number of results to return"),
+        use_chunks: bool = typer.Option(True, "--chunks/--documents", help="Search chunks or documents"),
+    ):
+        """Query a RAG collection."""
+        from euclid.rag import query_collection
+        console.print(EnhancedMarkdown(query_collection(
+            collection_id=collection_id,
+            query=query,
+            top_k=top_k,
+            use_chunks=use_chunks
+        )))
+    
+    @rag_app.command("delete")
+    def delete_rag_collection(
+        collection_id: str = typer.Argument(..., help="Collection ID"),
+    ):
+        """Delete a RAG collection."""
+        from euclid.rag import delete_collection
+        console.print(EnhancedMarkdown(delete_collection(collection_id)))
 
 @app.command("history")
 def history():
