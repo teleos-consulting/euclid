@@ -45,15 +45,24 @@ A CLI tool for interacting with local Ollama models, inspired by Claude Code but
 git clone https://github.com/yourusername/euclid.git
 cd euclid
 
-# Install dependencies
+# Install with all dependencies (recommended for full functionality)
+pip install -e ".[all]"
+
+# OR install with minimal dependencies
 pip install -e .
 
-# Optional: Install sentence-transformers for RAG functionality
-pip install sentence-transformers scikit-learn
+# OR install specific optional features:
+# For RAG (Retrieval Augmented Generation) functionality
+pip install -e ".[rag]"
 
-# Optional: Install web browsing dependencies
-pip install beautifulsoup4 html2text
+# For web browsing capabilities
+pip install -e ".[web]"
+
+# For development and testing
+pip install -e ".[dev,test]"
 ```
+
+For detailed installation instructions, see [Installation Guide](INSTALL.md).
 
 ### Method 2: Docker Installation
 
@@ -182,12 +191,54 @@ Euclid supports the following functions:
 
 ## Configuration
 
+### Environment Variables
+
 Euclid uses environment variables for configuration:
 
 - `OLLAMA_BASE_URL`: Base URL for your Ollama server (default: http://localhost:11434)
 - `OLLAMA_MODEL`: Default model to use (default: llama3)
 
 You can set these in a `.env` file in your project directory.
+
+### EUCLID.md Files
+
+For project-specific configuration, Euclid supports a special `EUCLID.md` file in your working directory. When present, Euclid automatically incorporates the contents of this file into the system prompt, providing project-specific context and instructions to the AI.
+
+The `EUCLID.md` file can contain:
+- Project overview and purpose
+- Codebase structure and organization
+- Development guidelines and best practices
+- Shortcuts and common commands
+- Instructions for specific tasks
+
+Example `EUCLID.md` structure:
+```markdown
+# EUCLID.md - Project-specific Instructions
+
+## Project Overview
+Brief description of the project...
+
+## Development Guidelines
+Guidelines for code style, testing, etc...
+
+## Shortcuts and Commands
+Common commands and shortcuts...
+
+## Common Tasks
+Instructions for specific tasks...
+```
+
+You can also define a complete system prompt by including a "System Prompt" section:
+
+```markdown
+# System Prompt
+
+You are an AI assistant specialized in helping with this specific project...
+[rest of custom system prompt]
+
+# Project Overview
+...
+```
 
 ## Advantages Over Claude Code
 
@@ -199,6 +250,7 @@ You can set these in a `.env` file in your project directory.
 - **Model Insights**: Benchmarking and detailed model information
 - **Privacy**: All processing happens locally on your machine
 - **API Server**: MCP-compatible API for integration with other tools
+- **EUCLID.md Support**: Similar to Claude's CLAUDE.md file, provide project-specific instructions
 
 ## API Server
 

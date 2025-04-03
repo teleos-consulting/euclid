@@ -15,6 +15,13 @@ from rich.box import ROUNDED
 from rich.live import Live
 from rich.prompt import Prompt, Confirm
 
+# Check for web browsing capabilities
+try:
+    from euclid.tools.web import web_tool, search_tool
+    HAVE_WEB_TOOLS = True
+except ImportError:
+    HAVE_WEB_TOOLS = False
+
 from euclid.config import config
 from euclid.ollama import OllamaClient, Message
 from euclid.conversation import Conversation
@@ -53,11 +60,24 @@ try:
 except ImportError:
     HAVE_RAG = False
 
+# Import server module
+try:
+    from euclid.server import run_server
+    HAVE_SERVER = True
+except ImportError:
+    HAVE_SERVER = False
+
 app = typer.Typer(help="A CLI tool for interacting with local Ollama models")
 models_app = typer.Typer(help="Model management commands")
 rag_app = typer.Typer(help="RAG (Retrieval Augmented Generation) commands")
+server_app = typer.Typer(help="API server commands")
+web_app = typer.Typer(help="Web browsing commands")
+cache_app = typer.Typer(help="Cache management commands")
 app.add_typer(models_app, name="models")
 app.add_typer(rag_app, name="rag")
+app.add_typer(server_app, name="server")
+app.add_typer(web_app, name="web")
+app.add_typer(cache_app, name="cache")
 
 @app.command("chat")
 def chat(
@@ -153,6 +173,12 @@ def chat(
                 system_content = "You are a helpful assistant."
         else:
             system_content = "You are a helpful assistant."
+    
+    # Look for EUCLID.md and enhance the system prompt
+    euclid_md_path = config.euclid_md_file
+    if euclid_md_path.exists():
+        system_content = config.get_project_system_prompt(system_content)
+        console.print(f"[info]Found EUCLID.md in the current directory. Using project-specific instructions.[/info]")
     
     # Add system prompt if no messages exist
     if not conversation.messages:
@@ -350,16 +376,25 @@ def run(
     # Create messages
     messages = []
     if system_prompt:
-        messages.append(Message(role="system", content=system_prompt))
+        system_content = system_prompt
     else:
         # Use default system prompt
         default_system_file = Path(__file__).parent.parent / "prompts" / "system_prompt.txt"
         if default_system_file.exists():
             try:
                 system_content = default_system_file.read_text()
-                messages.append(Message(role="system", content=system_content))
             except Exception:
-                pass
+                system_content = "You are a helpful assistant."
+        else:
+            system_content = "You are a helpful assistant."
+            
+    # Look for EUCLID.md and enhance the system prompt
+    euclid_md_path = config.euclid_md_file
+    if euclid_md_path.exists():
+        system_content = config.get_project_system_prompt(system_content)
+        console.print(f"[info]Found EUCLID.md in the current directory. Using project-specific instructions.[/info]")
+        
+    messages.append(Message(role="system", content=system_content))
     
     # Add function schema information to the system prompt if not already there
     if function_calling and (not messages or "function" not in messages[0].content):
@@ -380,7 +415,7 @@ def run(
             if messages and messages[0].role == "system":
                 messages[0].content += "\n\n" + function_desc
             else:
-                messages.insert(0, Message(role="system", function_desc))
+                messages.insert(0, Message(role="system", content=function_desc))
     
     messages.append(Message(role="user", content=prompt))
     
@@ -719,5 +754,140 @@ def functions():
     
     console.print(table)
 
+# Server commands if available
+if HAVE_SERVER:
+    @server_app.command("start")
+    def start_server(
+        host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind the server to"),
+        port: int = typer.Option(8000, "--port", "-p", help="Port to bind the server to"),
+        log_level: str = typer.Option("info", "--log-level", "-l", help="Logging level"),
+    ):
+        """Start the Euclid API server."""
+        console.print(f"[info]Starting Euclid API server on {host}:{port}[/info]")
+        run_server(host=host, port=port, log_level=log_level)
+
+# Web browsing commands if available
+if HAVE_WEB_TOOLS:
+    @web_app.command("fetch")
+    def fetch_web(
+        url: str = typer.Argument(..., help="URL to fetch content from"),
+        prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Prompt for content analysis"),
+        model: Optional[str] = typer.Option(None, "--model", "-m", help="Model to use for processing"),
+    ):
+        """Fetch content from a URL and analyze it."""
+        from euclid.tools.web import web_tool
+        result = web_tool(url=url, prompt=prompt)
+        console.print(EnhancedMarkdown(result))
+    
+    @web_app.command("search")
+    def search_web(
+        query: str = typer.Argument(..., help="Search query"),
+        num_results: int = typer.Option(5, "--num", "-n", help="Number of results to return"),
+    ):
+        """Search the web for information."""
+        from euclid.tools.web import search_tool
+        result = search_tool(query=query, num_results=num_results)
+        console.print(EnhancedMarkdown(result))
+
+# Cache management commands
+@cache_app.command("stats")
+def cache_stats():
+    """Show cache statistics."""
+    # Web cache stats
+    from euclid.web_cache import get_cache as get_web_cache
+    web_cache = get_web_cache()
+    web_stats = web_cache.get_stats()
+    
+    # Semantic cache stats
+    try:
+        from euclid.semantic_cache import get_semantic_cache
+        semantic_cache = get_semantic_cache()
+        semantic_stats = semantic_cache.get_stats()
+        has_semantic_cache = True
+    except ImportError:
+        has_semantic_cache = False
+        semantic_stats = {"enabled": False}
+    
+    # Display web cache stats
+    console.print("[bold]Web Cache Statistics:[/bold]")
+    console.print(f"Entries: {web_stats['entries']}")
+    console.print(f"Total Size: {web_stats['size_human']}")
+    console.print(f"Average Age: {web_stats['avg_age_human']}")
+    console.print(f"Hit Ratio: {web_stats['hit_ratio']:.2f} ({web_stats['hits']} hits, {web_stats['misses']} misses)")
+    
+    if has_semantic_cache:
+        # Display semantic cache stats
+        console.print("\n[bold]Semantic Cache Statistics:[/bold]")
+        console.print(f"Entries: {semantic_stats['entries']}")
+        console.print(f"Total Size: {semantic_stats['size_human']}")
+        console.print(f"Average Age: {semantic_stats['avg_age_human']}")
+        console.print(f"Hit Ratio: {semantic_stats['hit_ratio']:.2f} ({semantic_stats['hits']} hits, {semantic_stats['misses']} misses)")
+        console.print(f"Using Embedding Model: {semantic_stats.get('has_embeddings_model', False)}")
+        
+        # Display model distribution
+        if 'model_distribution' in semantic_stats and semantic_stats['model_distribution']:
+            console.print("\n[bold]Model Distribution:[/bold]")
+            for model, count in semantic_stats['model_distribution'].items():
+                console.print(f"  {model}: {count} entries")
+    else:
+        console.print("\n[warning]Semantic cache is not available. Install sentence-transformers to enable it.[/warning]")
+
+@cache_app.command("clear")
+def clear_cache(
+    web: bool = typer.Option(True, "--web/--no-web", help="Clear web cache"),
+    semantic: bool = typer.Option(True, "--semantic/--no-semantic", help="Clear semantic cache"),
+):
+    """Clear cache entries."""
+    if web:
+        from euclid.web_cache import get_cache as get_web_cache
+        web_cache = get_web_cache()
+        entries = web_cache.clear()
+        console.print(f"[success]Cleared {entries} entries from web cache.[/success]")
+    
+    if semantic:
+        try:
+            from euclid.semantic_cache import get_semantic_cache
+            semantic_cache = get_semantic_cache()
+            entries = semantic_cache.clear()
+            console.print(f"[success]Cleared {entries} entries from semantic cache.[/success]")
+        except ImportError:
+            console.print("[warning]Semantic cache is not available.[/warning]")
+
+@cache_app.command("purge")
+def purge_cache():
+    """Remove expired cache entries."""
+    # Purge web cache
+    from euclid.web_cache import get_cache as get_web_cache
+    web_cache = get_web_cache()
+    web_entries = web_cache.purge_expired()
+    console.print(f"[success]Purged {web_entries} expired entries from web cache.[/success]")
+    
+    # Purge semantic cache
+    try:
+        from euclid.semantic_cache import get_semantic_cache
+        semantic_cache = get_semantic_cache()
+        semantic_entries = semantic_cache.purge_expired()
+        console.print(f"[success]Purged {semantic_entries} expired entries from semantic cache.[/success]")
+    except ImportError:
+        console.print("[warning]Semantic cache is not available.[/warning]")
+
+@cache_app.command("enable")
+def enable_semantic_cache(
+    threshold: float = typer.Option(0.85, "--threshold", "-t", help="Similarity threshold (0-1)"),
+):
+    """Enable semantic caching with specified parameters."""
+    try:
+        from euclid.semantic_cache import get_semantic_cache
+        semantic_cache = get_semantic_cache()
+        semantic_cache.similarity_threshold = threshold
+        console.print(f"[success]Semantic cache enabled with similarity threshold {threshold}.[/success]")
+        
+        if not semantic_cache.embeddings_model:
+            console.print("[warning]No embedding model available. Install sentence-transformers for better semantic matching.[/warning]")
+    except ImportError:
+        console.print("[error]Semantic cache is not available. Install required dependencies.[/error]")
+
 if __name__ == "__main__":
-    app()
+    # If called directly, default to TUI mode
+    from euclid.tui import run_tui
+    run_tui()

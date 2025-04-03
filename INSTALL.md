@@ -37,18 +37,65 @@ ollama pull phi  # Smaller model for lower-resource machines
 
 ## Installing Euclid
 
+### Method 1: Standard Installation
+
 1. Clone the repository or download the files
 
-2. Install in development mode:
+2. Install in development mode with all dependencies:
+   ```bash
+   cd euclid
+   pip install -e ".[all]"
+   ```
+
+3. Or install with minimal dependencies:
    ```bash
    cd euclid
    pip install -e .
    ```
 
-3. Alternatively, run without installing:
+4. If you want specific optional features, install the corresponding extras:
+   ```bash
+   # For RAG (Retrieval Augmented Generation) functionality
+   pip install -e ".[rag]"
+   
+   # For web browsing capabilities
+   pip install -e ".[web]"
+   
+   # For server functionality
+   pip install -e ".[server]"
+   
+   # For development and testing
+   pip install -e ".[dev,test]"
+   ```
+
+5. Alternatively, run without installing (requires dependencies to be installed manually):
    ```bash
    cd euclid
+   pip install -r requirements.txt
    python main.py
+   ```
+
+### Method 2: Docker Installation
+
+For a containerized setup that includes both Euclid and Ollama:
+
+1. Make sure you have Docker and Docker Compose installed
+
+2. Clone the repository and navigate to it:
+   ```bash
+   git clone https://github.com/yourusername/euclid.git
+   cd euclid
+   ```
+
+3. Start the containers:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. Access Euclid through the container:
+   ```bash
+   docker exec -it euclid-app bash
+   euclid chat
    ```
 
 ## Configuration
@@ -60,6 +107,8 @@ You can configure Euclid using environment variables or by creating a `.env` fil
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
 ```
+
+When using Docker, modify the environment variables in the `docker-compose.yml` file.
 
 ## Usage
 
@@ -89,6 +138,19 @@ euclid run "What is the capital of France?"
 euclid run "Write a Python function to calculate Fibonacci numbers" --model codellama
 ```
 
+### Advanced Terminal UI
+
+```bash
+# Launch the split-screen TUI
+euclid tui
+
+# With a specific model
+euclid tui --model mistral
+
+# Without showing thinking
+euclid tui --no-thinking
+```
+
 ### Other Commands
 
 ```bash
@@ -115,4 +177,24 @@ In the chat interface, you can use various tools by typing slash commands:
 /exec <command> - Execute a shell command
 /edit <file>    - Open a file in your default editor
 /wget <url> [output_file]     - Download a file from the web
+```
+
+## Optional Features
+
+### RAG Functionality
+
+To enable RAG (Retrieval Augmented Generation), install the additional dependencies:
+
+```bash
+pip install sentence-transformers scikit-learn
+```
+
+When using Docker, these are included automatically.
+
+### Image Rendering
+
+For terminal image rendering support, install:
+
+```bash
+pip install terminal-image
 ```
