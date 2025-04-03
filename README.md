@@ -38,11 +38,18 @@ A CLI tool for interacting with local Ollama models, inspired by Claude Code but
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8 or newer
+- Ollama installed and running locally
+
+See [INSTALL.md](INSTALL.md) for detailed instructions on installing Ollama.
+
 ### Method 1: Standard Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/euclid.git
+git clone https://github.com/teleos-consulting/euclid.git
 cd euclid
 
 # Install with all dependencies (recommended for full functionality)
@@ -68,28 +75,41 @@ For detailed installation instructions, see [Installation Guide](INSTALL.md).
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/euclid.git
+git clone https://github.com/teleos-consulting/euclid.git
 cd euclid
 
 # Start the containers
-docker-compose -f docker/docker-compose.yml up -d
+docker-compose up -d
 
 # Access Euclid
 docker exec -it euclid-app bash
-euclid chat
+euclid
 ```
 
 For more details on Docker setup, see [Docker README](docker/README.md).
 
-## Usage
-
-### Interactive Chat
+## Quick Start
 
 ```bash
 # Start the advanced terminal UI (default)
 euclid
 
 # Use the CLI interface instead
+euclid-cli chat
+
+# Run a single prompt
+euclid-cli run "Write a Python function to calculate Fibonacci numbers"
+```
+
+## Usage
+
+### Interactive Chat
+
+```bash
+# Start the advanced terminal UI
+euclid
+
+# Use the CLI interface
 euclid-cli chat
 
 # Use a specific model
@@ -125,7 +145,7 @@ euclid-cli models details llama3
 euclid-cli models benchmark llama3 --iterations 5
 ```
 
-### RAG Functionality (if sentence-transformers is installed)
+### RAG Functionality (Requires sentence-transformers)
 
 ```bash
 # Create a new collection
@@ -240,6 +260,8 @@ You are an AI assistant specialized in helping with this specific project...
 ...
 ```
 
+See the project's [EUCLID.md](EUCLID.md) file for an example of best practices and project structure documentation.
+
 ## Advantages Over Claude Code
 
 - **Works Offline**: Uses your local Ollama models, no internet required
@@ -278,6 +300,8 @@ For detailed documentation on the API server, see [API Documentation](docs/api/R
 
 For information on how to run tests and contribute to testing, see [Test Plan](tests/TEST_PLAN.md).
 
+The project aims to maintain > 90% test coverage for all code.
+
 ## Contributing
 
 Contributions are welcome! Please see [Contributing Guide](CONTRIBUTING.md) for more information.
@@ -288,3 +312,8 @@ Contributions are welcome! Please see [Contributing Guide](CONTRIBUTING.md) for 
 - [Docker Setup](docker/README.md): Running with Docker
 - [Contributing](CONTRIBUTING.md): How to contribute to the project
 - [Test Plan](tests/TEST_PLAN.md): Testing strategy and process
+- [EUCLID.md](EUCLID.md): Project structure and best practices
+
+## License
+
+MIT License
